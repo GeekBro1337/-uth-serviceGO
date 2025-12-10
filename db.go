@@ -93,11 +93,36 @@ BEGIN
     );
 END;`
 
+	schemaAuditLog := `
+IF OBJECT_ID('log_audit', 'U') IS NULL
+BEGIN
+    CREATE TABLE log_audit (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        path NVARCHAR(512) NOT NULL,
+        method NVARCHAR(16) NOT NULL,
+        status INT NOT NULL,
+        latency_ms INT NOT NULL,
+        ip NVARCHAR(64) NOT NULL,
+        username NVARCHAR(255) NULL,
+        log_type NVARCHAR(50) NOT NULL DEFAULT 'auth',
+        created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+    );
+END;`
+
+	addLogTypeIfMissing := `
+IF COL_LENGTH('log_audit', 'log_type') IS NULL
+BEGIN
+    ALTER TABLE log_audit
+    ADD log_type NVARCHAR(50) NOT NULL CONSTRAINT DF_log_audit_type DEFAULT 'auth';
+END;`
+
 	DB.MustExec(schemaUsers)
 	DB.MustExec(schemaRoles)
 	DB.MustExec(schemaPermissions)
 	DB.MustExec(schemaRolePermissions)
 	DB.MustExec(schemaRefreshTokens)
+	DB.MustExec(schemaAuditLog)
+	DB.MustExec(addLogTypeIfMissing)
 
 	fmt.Println("✅ DB connected and migrated")
 
@@ -183,4 +208,16 @@ func DeleteRefreshToken(token string) error {
 		DELETE FROM refresh_tokens WHERE token = @p1
 	`, token)
 	return err
+}
+
+// SaveAuditLog сохраняет запись аудита запросов
+func SaveAuditLog(path, method string, status int, latencyMs int, ip, username, logType string) {
+	_, err := DB.Exec(`
+		INSERT INTO log_audit (path, method, status, latency_ms, ip, username, log_type)
+		VALUES (@p1, @p2, @p3, @p4, @p5, @p6, @p7)
+	`, path, method, status, latencyMs, ip, username, logType)
+	if err != nil {
+		// не прерываем основной поток из-за ошибки логирования
+		log.Printf("audit log save error: %v", err)
+	}
 }

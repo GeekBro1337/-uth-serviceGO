@@ -31,6 +31,9 @@ func main() {
 	r := gin.Default()
 	r.SetTrustedProxies(nil) // убираем предупреждение Gin о прокси
 
+	// ✅ Аудит логов
+	r.Use(LoggingMiddleware())
+
 	// ✅ Разрешаем CORS для всех источников (с поддержкой credentials)
 	r.Use(cors.New(cors.Config{
 		AllowOriginFunc: func(origin string) bool {

@@ -3,10 +3,41 @@ package main
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
+
+// LoggingMiddleware writes audit logs to DB (log_audit)
+func LoggingMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+
+		latency := time.Since(start)
+		status := c.Writer.Status()
+		path := c.Request.URL.Path
+		method := c.Request.Method
+		ip := c.ClientIP()
+
+		// берём username из контекста, если есть (после AuthMiddleware)
+		username := c.GetString("username")
+
+		// Определяем тип лога: авторизация или права (permissions)
+		logType := "permissions"
+		if strings.HasPrefix(path, "/login") ||
+			strings.HasPrefix(path, "/register") ||
+			strings.HasPrefix(path, "/refresh") ||
+			strings.HasPrefix(path, "/logout") ||
+			strings.HasPrefix(path, "/reset-password") {
+			logType = "auth"
+		}
+
+		// сохраняем лог в отдельной горутине, чтобы не блокировать ответ
+		go SaveAuditLog(path, method, status, int(latency.Milliseconds()), ip, username, logType)
+	}
+}
 
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
