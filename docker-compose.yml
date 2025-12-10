@@ -1,16 +1,16 @@
 services:
   db:
-    image: postgres:15
-    container_name: auth_postgres
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: auth_mssql
     environment:
-      POSTGRES_DB: authdb
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "YourStrong!Passw0rd"
+      MSSQL_PID: "Developer"
     ports:
-      - "2020:5432"
+      - "1433:1433"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mssql_data:/var/opt/mssql
     restart: always
 
 volumes:
-  postgres_data:
+  mssql_data:

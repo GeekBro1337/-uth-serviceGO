@@ -67,7 +67,7 @@ func PermissionMiddleware(requiredPerm string) gin.HandlerFunc {
 			FROM role_permissions rp
 			JOIN roles r ON rp.role_id = r.id
 			JOIN permissions p ON rp.permission_id = p.id
-			WHERE r.name = $1 AND p.name = $2;
+			WHERE r.name = @p1 AND p.name = @p2;
 		`
 
 		err := DB.Get(&count, query, roleName, requiredPerm)

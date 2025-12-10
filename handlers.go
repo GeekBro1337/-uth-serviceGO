@@ -34,10 +34,12 @@ func Register(c *gin.Context) {
 		role = "user"
 	}
 
-	_, err := DB.Exec(`INSERT INTO users (username, password, role) VALUES ($1, $2, $3)`,
+	_, err := DB.Exec(`INSERT INTO users (username, password, role) VALUES (@p1, @p2, @p3)`,
 		input.Username, string(hashedPassword), role)
 
 	if err != nil {
+		// Логируем причину, чтобы видеть точную ошибку вставки
+		log.Printf("register error: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "User already exists"})
 		return
 	}
@@ -57,7 +59,7 @@ func Login(c *gin.Context) {
 	}
 
 	var user User
-	err := DB.Get(&user, `SELECT * FROM users WHERE username = $1`, input.Username)
+	err := DB.Get(&user, `SELECT * FROM users WHERE username = @p1`, input.Username)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
@@ -131,7 +133,7 @@ func ResetPassword(c *gin.Context) {
 	}
 
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(input.NewPassword), bcrypt.DefaultCost)
-	res, err := DB.Exec(`UPDATE users SET password=$1 WHERE username=$2`, string(hashedPassword), input.Username)
+	res, err := DB.Exec(`UPDATE users SET password=@p1 WHERE username=@p2`, string(hashedPassword), input.Username)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error"})
 		return
@@ -157,7 +159,7 @@ func MeEndpoint(c *gin.Context) {
 		FROM role_permissions rp
 		JOIN roles r ON rp.role_id = r.id
 		JOIN permissions p ON rp.permission_id = p.id
-		WHERE r.name = $1
+		WHERE r.name = @p1
 		ORDER BY p.name
 	`
 	err := DB.Select(&permissions, query, role)
@@ -224,7 +226,7 @@ func RefreshEndpoint(c *gin.Context) {
 	}
 
 	var user User
-	if err := DB.Get(&user, "SELECT * FROM users WHERE id = $1", rt.UserID); err != nil {
+	if err := DB.Get(&user, "SELECT * FROM users WHERE id = @p1", rt.UserID); err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
 		return
 	}
@@ -266,7 +268,7 @@ func GetRoles(c *gin.Context) {
 			SELECT p.name
 			FROM role_permissions rp
 			JOIN permissions p ON rp.permission_id = p.id
-			WHERE rp.role_id = $1
+			WHERE rp.role_id = @p1
 		`
 		_ = DB.Select(&perms, query, role.ID)
 
@@ -302,24 +304,24 @@ func UpdateRolePermissions(c *gin.Context) {
 
 	for _, u := range input.Updates {
 		var roleID int
-		err := DB.Get(&roleID, "SELECT id FROM roles WHERE name=$1", u.Role)
+		err := DB.Get(&roleID, "SELECT id FROM roles WHERE name=@p1", u.Role)
 		if err != nil {
 			c.JSON(400, gin.H{"error": "Role not found: " + u.Role})
 			return
 		}
 
 		// Очистить старые права
-		DB.Exec("DELETE FROM role_permissions WHERE role_id=$1", roleID)
+		DB.Exec("DELETE FROM role_permissions WHERE role_id=@p1", roleID)
 
 		// Назначить новые права
 		for _, permName := range u.Permissions {
 			var permID int
-			err = DB.Get(&permID, "SELECT id FROM permissions WHERE name=$1", permName)
+			err = DB.Get(&permID, "SELECT id FROM permissions WHERE name=@p1", permName)
 			if err != nil {
 				c.JSON(400, gin.H{"error": "Permission not found: " + permName})
 				return
 			}
-			DB.Exec("INSERT INTO role_permissions (role_id, permission_id) VALUES ($1, $2)", roleID, permID)
+			DB.Exec("INSERT INTO role_permissions (role_id, permission_id) VALUES (@p1, @p2)", roleID, permID)
 		}
 	}
 
